@@ -222,22 +222,18 @@
         estado.textContent = '🔄 Probando conexión...';
         estado.className = 'text-xs text-yellow-500 mt-1 connecting';
         
-        try {
-            const url = `http://${ip}/captura?t=${Date.now()}`;
-            const response = await fetch(url, { mode: 'cors' });
-            
-            if (response.ok) {
-                estado.textContent = '✅ ESP32-CAM conectado!';
-                estado.className = 'text-xs text-green-500 mt-1';
-                esp32Ip = ip;
-            } else {
-                throw new Error('Respuesta no válida');
-            }
-        } catch (e) {
-            estado.textContent = '❌ No se pudo conectar. Verifica la IP y que estés en la misma red WiFi.';
+        // Usar imagen para probar (evita CORS)
+        const testImg = new Image();
+        testImg.onload = function() {
+            estado.textContent = '✅ ESP32-CAM conectado!';
+            estado.className = 'text-xs text-green-500 mt-1';
+            esp32Ip = ip;
+        };
+        testImg.onerror = function() {
+            estado.textContent = '❌ No se pudo conectar. Verifica la IP.';
             estado.className = 'text-xs text-red-500 mt-1';
-            console.error(e);
-        }
+        };
+        testImg.src = `http://${ip}/captura?t=${Date.now()}`;
     }
     
     // ============================================
@@ -259,16 +255,29 @@
         
         const btn = document.getElementById('btn-iniciar');
         btn.disabled = true;
-        btn.textContent = '⏳ Conectando...';
+        btn.textContent = '⏳ Conectando al ESP32...';
+        
+        // Probar ESP32 con imagen (evita CORS)
+        const testOk = await new Promise((resolve) => {
+            const testImg = new Image();
+            testImg.onload = () => resolve(true);
+            testImg.onerror = () => resolve(false);
+            testImg.src = `http://${ip}/captura?t=${Date.now()}`;
+            
+            // Timeout de 5 segundos
+            setTimeout(() => resolve(false), 5000);
+        });
+        
+        if (!testOk) {
+            alert('No se pudo conectar al ESP32-CAM.\n\nVerifica:\n1. La IP es correcta\n2. Estás en la misma red WiFi\n3. El ESP32 está encendido');
+            btn.disabled = false;
+            btn.textContent = '🚀 Conectar e Iniciar';
+            return;
+        }
+        
+        esp32Ip = ip;
         
         try {
-            // Probar ESP32
-            const testUrl = `http://${ip}/captura?t=${Date.now()}`;
-            const testResp = await fetch(testUrl, { mode: 'cors' });
-            if (!testResp.ok) throw new Error('ESP32-CAM no responde');
-            
-            esp32Ip = ip;
-            
             // Cargar modelo
             btn.textContent = '⏳ Cargando modelo IA...';
             const url = modelUrl.endsWith('/') ? modelUrl : modelUrl + '/';
@@ -297,7 +306,7 @@
             
         } catch (e) {
             console.error(e);
-            alert('Error: ' + e.message);
+            alert('Error cargando modelo: ' + e.message);
             btn.disabled = false;
             btn.textContent = '🚀 Conectar e Iniciar';
         }
@@ -344,13 +353,18 @@
             
             // Crear imagen temporal para análisis
             const img = new Image();
-            img.crossOrigin = 'anonymous';
+            img.crossOrigin = 'anonymous';  // Importante para CORS
             
-            await new Promise((resolve, reject) => {
-                img.onload = resolve;
-                img.onerror = reject;
+            const imgLoaded = await new Promise((resolve) => {
+                img.onload = () => resolve(true);
+                img.onerror = () => resolve(false);
                 img.src = imgUrl;
+                setTimeout(() => resolve(false), 5000);
             });
+            
+            if (!imgLoaded) {
+                throw new Error('No se pudo cargar la imagen');
+            }
             
             // Actualizar vista
             document.getElementById('camera-feed').src = imgUrl;
@@ -387,7 +401,11 @@
             
         } catch (e) {
             console.error('Error analizando:', e);
-            document.getElementById('estado-text').textContent = 'Error de conexión';
+            document.getElementById('resultado-contenido').innerHTML = `
+                <div class="text-4xl mb-3">⚠️</div>
+                <p class="text-red-400">Error de conexión</p>
+                <p class="text-xs text-slate-500 mt-2">Verifica el ESP32-CAM</p>
+            `;
         }
         
         btn.disabled = false;
@@ -499,12 +517,11 @@
         flashEncendido = !flashEncendido;
         const endpoint = flashEncendido ? 'on' : 'off';
         
-        try {
-            await fetch(`http://${esp32Ip}/flash/${endpoint}`);
-            document.getElementById('btn-flash').textContent = flashEncendido ? '💡 Flash ON' : '💡 Flash OFF';
-        } catch (e) {
-            console.error('Error controlando flash:', e);
-        }
+        // Usar imagen para hacer la solicitud (evita CORS)
+        const img = new Image();
+        img.src = `http://${esp32Ip}/flash/${endpoint}?t=${Date.now()}`;
+        
+        document.getElementById('btn-flash').textContent = flashEncendido ? '💡 Flash ON' : '💡 Flash OFF';
     }
     
     function toggleModoAuto() {
